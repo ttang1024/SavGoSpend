@@ -12,6 +12,7 @@ import type { Href } from 'expo-router';
 export type VoiceAction =
   | { kind: 'navigate'; href: Href }
   | { kind: 'emergency' }
+  | { kind: 'points' }
   | { kind: 'help' };
 
 export type VoiceCommand = {
@@ -51,6 +52,22 @@ export const VOICE_COMMANDS: VoiceCommand[] = [
     phrases: ['smart rewards', 'my rewards', 'rewards', 'my points', 'points'],
     action: { kind: 'navigate', href: '/rewards' },
     confirmation: 'Opening Smart Rewards.',
+  },
+  {
+    id: 'points-balance',
+    label: 'How many points do I have',
+    phrases: [
+      'how many points do i have',
+      'how many points have i got',
+      'how many points',
+      'my points balance',
+      'points balance',
+      'check my balance',
+      'my balance',
+    ],
+    action: { kind: 'points' },
+    // Spoken answer is built at runtime from the live balance.
+    confirmation: '',
   },
   {
     id: 'retailers',

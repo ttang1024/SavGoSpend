@@ -15,6 +15,8 @@ import React, {
 import { confirmEmergencyCall } from '@/lib/emergency';
 import { SPEECH_RECOGNITION_AVAILABLE } from '@/lib/speechRecognition';
 import { buildHelpSpeech, matchVoiceCommand, type VoiceCommand } from '@/lib/voiceCommands';
+import { useMember } from '@/providers/MemberProvider';
+import { tierInfo } from '@/lib/rewards';
 import { useAccessibility } from '@/theme';
 import type {
   RecognitionControls,
@@ -66,6 +68,9 @@ function getNaturalVoiceId(): Promise<string | undefined> {
 /** How long a confirmation/transcript lingers in the status pill before clearing. */
 const MESSAGE_TIMEOUT_MS = 5000;
 
+/** How long the heard transcript ("subtitle") stays on screen after the last update. */
+const TRANSCRIPT_TIMEOUT_MS = 3000;
+
 const MIC_PERMISSION_MESSAGE =
   'I need microphone access to listen. You can turn it on in your device settings.';
 
@@ -92,8 +97,14 @@ const VoiceContext = createContext<VoiceContextValue | undefined>(undefined);
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { settings } = useAccessibility();
+  const { member } = useMember();
   const enabled = settings.voiceCommands;
   const available = SPEECH_RECOGNITION_AVAILABLE;
+
+  // Mirror the member so the (identity-stable) command handler can read the
+  // latest points without re-subscribing the recognition bridge.
+  const memberRef = useRef(member);
+  memberRef.current = member;
 
   const [status, setStatus] = useState<VoiceStatus>(available ? 'idle' : 'unsupported');
   const [transcript, setTranscript] = useState('');
@@ -133,6 +144,18 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     messageTimer.current = setTimeout(() => setMessage(null), MESSAGE_TIMEOUT_MS);
   }, []);
 
+  // Show the heard transcript as a subtitle, auto-clearing it 3s after the last
+  // update so it never lingers once the member stops speaking. Interim results
+  // keep arriving while they talk, each resetting the timer, so it stays visible.
+  const transcriptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showTranscript = useCallback((text: string) => {
+    setTranscript(text);
+    if (transcriptTimer.current) clearTimeout(transcriptTimer.current);
+    if (text) {
+      transcriptTimer.current = setTimeout(() => setTranscript(''), TRANSCRIPT_TIMEOUT_MS);
+    }
+  }, []);
+
   const speakHelp = useCallback(() => feedback(buildHelpSpeech()), [feedback]);
 
   const runCommand = useCallback(
@@ -147,6 +170,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           feedback(command.confirmation);
           confirmEmergencyCall();
           break;
+        case 'points': {
+          const current = memberRef.current;
+          if (!current) {
+            feedback("I couldn't find your points just now.");
+            break;
+          }
+          const pts = `${current.points} point${current.points === 1 ? '' : 's'}`;
+          feedback(`You have ${pts} to spend. You're a ${tierInfo(current.tier).tier} member.`);
+          break;
+        }
         case 'help':
           speakHelp();
           break;
@@ -174,7 +207,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       onStart: () => setStatus('listening'),
       onEnd: () => setStatus((prev) => (prev === 'listening' ? 'idle' : prev)),
       onResult: (heard, isFinal) => {
-        setTranscript(heard);
+        showTranscript(heard);
         if (isFinal && heard.trim()) {
           setStatus('processing');
           handleFinalTranscript(heard);
@@ -195,7 +228,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       },
       onPermissionDenied: () => feedback(MIC_PERMISSION_MESSAGE),
     }),
-    [feedback, handleFinalTranscript],
+    [feedback, handleFinalTranscript, showTranscript],
   );
 
   const startListening = useCallback(async () => {
@@ -204,7 +237,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      setTranscript('');
+      showTranscript('');
       setMessage(null);
       Speech.stop().catch(() => {});
       await controlsRef.current.start();
@@ -212,7 +245,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       setStatus('idle');
       feedback('Sorry, I could not start listening. Please try again.');
     }
-  }, [available, feedback]);
+  }, [available, feedback, showTranscript]);
 
   const stopListening = useCallback(() => {
     controlsRef.current?.stop();
@@ -227,6 +260,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   useEffect(
     () => () => {
       if (messageTimer.current) clearTimeout(messageTimer.current);
+      if (transcriptTimer.current) clearTimeout(transcriptTimer.current);
       Speech.stop().catch(() => {});
     },
     [],

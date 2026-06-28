@@ -2,7 +2,7 @@
  * Sample seed data for building UI before Firestore is wired. Replace with
  * live queries against the `retailers`, `events`, and `articles` collections.
  */
-import { GoodToKnowArticle, Retailer, WhatsOnEvent } from '@/types';
+import { GoodToKnowArticle, RedeemableReward, Retailer, WhatsOnEvent } from '@/types';
 
 export const SAMPLE_RETAILERS: Retailer[] = [
   {
@@ -43,6 +43,14 @@ export const SAMPLE_RETAILERS: Retailer[] = [
 
 export const SAMPLE_EVENTS: WhatsOnEvent[] = [
   {
+    id: 'e0',
+    title: 'Seniors Matinee Concert',
+    summary: 'A past event — kept here to show the upcoming-events filter at work.',
+    startsAt: '2026-06-20T13:00:00+12:00',
+    location: 'Clarence Street Theatre, Hamilton',
+    country: 'NZ',
+  },
+  {
     id: 'e1',
     title: 'Riverbank Morning Walk',
     summary: 'Gentle guided walk along the Waikato River. All paces welcome.',
@@ -57,6 +65,42 @@ export const SAMPLE_EVENTS: WhatsOnEvent[] = [
     startsAt: '2026-07-08T10:00:00+12:00',
     location: 'Garden Place, Hamilton',
     country: 'NZ',
+  },
+  {
+    id: 'e3',
+    title: 'Library Tech Help Drop-in',
+    summary: 'Bring your phone — friendly volunteers help with apps, photos, and calls.',
+    startsAt: '2026-07-15T14:00:00+12:00',
+    location: 'Hamilton Central Library',
+    country: 'NZ',
+  },
+];
+
+/**
+ * Sample Smart Rewards catalogue. Members spend their points balance on these;
+ * replace with a `rewards` Firestore collection when the catalogue is live.
+ */
+export const SAMPLE_REWARDS: RedeemableReward[] = [
+  {
+    id: 'rw1',
+    title: '$5 off your next coffee',
+    description: 'Redeem at any participating café.',
+    cost: 80,
+    icon: '☕',
+  },
+  {
+    id: 'rw2',
+    title: 'Free reusable SGO tote bag',
+    description: 'Collect in store with your membership card.',
+    cost: 150,
+    icon: '🛍️',
+  },
+  {
+    id: 'rw3',
+    title: '$10 pharmacy voucher',
+    description: 'Towards anything in store at Te Awa Pharmacy.',
+    cost: 250,
+    icon: '💊',
   },
 ];
 

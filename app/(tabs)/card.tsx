@@ -31,7 +31,7 @@ export default function CardScreen() {
   // The onboarding guard guarantees a member exists once inside the tabs.
   if (!member) return null;
 
-  const { next, progress, pointsToNext } = tierProgress(member.points);
+  const { next, progress, pointsToNext } = tierProgress(member.lifetimePoints);
 
   return (
     <Screen scroll>

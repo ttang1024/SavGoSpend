@@ -11,7 +11,14 @@ export type Member = {
   membershipNumber: string;
   joinedAt: string; // ISO date
   tier: MembershipTier;
+  /** Spendable balance — points available to redeem right now. */
   points: number;
+  /**
+   * Total points ever earned. Drives the membership tier and never decreases,
+   * so redeeming points never demotes a member — a deliberate, dignity-first
+   * choice (a Kaumatua stays a Kaumatua).
+   */
+  lifetimePoints: number;
   homeCountry: Country;
 };
 
@@ -31,13 +38,25 @@ export const DEFAULT_OPT_INS: OptInSettings = {
   shareUsageData: false,
 };
 
-/** A single entry in the member's Smart Rewards points ledger. */
+/**
+ * A single entry in the member's Smart Rewards points ledger. `points` is
+ * positive when earned and negative when redeemed.
+ */
 export type PointsActivity = {
   id: string;
   points: number;
   reason: string;
   retailerId?: string;
   createdAt: string; // ISO date-time
+};
+
+/** A reward a member can redeem their spendable points balance for. */
+export type RedeemableReward = {
+  id: string;
+  title: string;
+  description?: string;
+  cost: number;
+  icon?: string;
 };
 
 /** The locally persisted member profile, including opt-ins and optional email. */

@@ -36,6 +36,19 @@ export type AwardResult = {
   newTier: MembershipTier;
 };
 
+export type RedeemInput = {
+  cost: number;
+  reason: string;
+};
+
+export type RedeemResult = {
+  redeemed: boolean;
+  /** Spendable balance after the redemption (unchanged when it fails). */
+  balance: number;
+  /** True when the balance was too low to cover the cost. */
+  insufficient: boolean;
+};
+
 type MemberContextValue = {
   member: MemberProfile | null;
   /** True once the cached profile has been read (or confirmed absent). */
@@ -47,6 +60,8 @@ type MemberContextValue = {
   completeOnboarding: (input: OnboardingInput) => Promise<void>;
   /** Awards Smart Rewards points, recomputes the tier, and records the activity. */
   awardPoints: (input: AwardPointsInput) => Promise<AwardResult>;
+  /** Spends points from the balance. Tier is unaffected (lifetime never drops). */
+  redeemPoints: (input: RedeemInput) => Promise<RedeemResult>;
   updateOptIns: (optIns: OptInSettings) => Promise<void>;
   /** Clears the profile (local + cloud) — used for testing and "start over". */
   resetMember: () => Promise<void>;
@@ -58,6 +73,16 @@ const MemberContext = createContext<MemberContextValue | undefined>(undefined);
 function generateMembershipNumber(): string {
   const block = () => Math.floor(1000 + Math.random() * 9000);
   return `SGO-${block()}-${block()}`;
+}
+
+/**
+ * Brings a loaded profile up to the current shape. Profiles created before
+ * spendable/lifetime points were split lack `lifetimePoints`; seed it from the
+ * existing balance so their tier is preserved.
+ */
+function normalizeProfile(profile: MemberProfile): MemberProfile {
+  if (typeof profile.lifetimePoints === 'number') return profile;
+  return { ...profile, lifetimePoints: profile.points };
 }
 
 /**
@@ -94,7 +119,7 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (active && raw) {
-          const cached = JSON.parse(raw) as MemberProfile;
+          const cached = normalizeProfile(JSON.parse(raw) as MemberProfile);
           memberRef.current = cached;
           setMember(cached);
         }
@@ -116,9 +141,10 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
             // Only overwrite when the cloud has data, so a transient empty
             // snapshot never wipes the offline cache.
             if (active && remote) {
-              memberRef.current = remote;
-              setMember(remote);
-              AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(remote)).catch(() => {});
+              const normalized = normalizeProfile(remote);
+              memberRef.current = normalized;
+              setMember(normalized);
+              AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(normalized)).catch(() => {});
             }
           },
           () => {},
@@ -163,6 +189,7 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
         joinedAt: new Date().toISOString(),
         tier: 'Explorer',
         points: 0,
+        lifetimePoints: 0,
         homeCountry: input.homeCountry,
         optIns: input.optIns,
         pointsHistory: [],
@@ -185,8 +212,8 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       if (!current || points <= 0) {
         return { awarded: false, tierChanged: false, newTier: current?.tier ?? 'Explorer' };
       }
-      const newPoints = current.points + points;
-      const newTier = tierForPoints(newPoints);
+      const newLifetime = current.lifetimePoints + points;
+      const newTier = tierForPoints(newLifetime);
       const activity = {
         id: `pa-${Date.now()}`,
         points,
@@ -196,7 +223,8 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       };
       const next: MemberProfile = {
         ...current,
-        points: newPoints,
+        points: current.points + points,
+        lifetimePoints: newLifetime,
         tier: newTier,
         // Keep the cached ledger bounded; the full history lives in Firestore.
         pointsHistory: [activity, ...current.pointsHistory].slice(0, 50),
@@ -204,6 +232,35 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       await persist(next);
       syncCloud(next);
       return { awarded: true, tierChanged: newTier !== current.tier, newTier };
+    },
+    [persist, syncCloud],
+  );
+
+  const redeemPoints = useCallback(
+    async ({ cost, reason }: RedeemInput): Promise<RedeemResult> => {
+      const current = memberRef.current;
+      if (!current || cost <= 0) {
+        return { redeemed: false, balance: current?.points ?? 0, insufficient: false };
+      }
+      if (current.points < cost) {
+        return { redeemed: false, balance: current.points, insufficient: true };
+      }
+      const newBalance = current.points - cost;
+      const activity = {
+        id: `pa-${Date.now()}`,
+        points: -cost, // negative marks a redemption in the ledger
+        reason,
+        createdAt: new Date().toISOString(),
+      };
+      const next: MemberProfile = {
+        ...current,
+        points: newBalance,
+        // Tier and lifetimePoints are intentionally untouched — spending never demotes.
+        pointsHistory: [activity, ...current.pointsHistory].slice(0, 50),
+      };
+      await persist(next);
+      syncCloud(next);
+      return { redeemed: true, balance: newBalance, insufficient: false };
     },
     [persist, syncCloud],
   );
@@ -240,10 +297,11 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       syncEnabled: isFirebaseConfigured,
       completeOnboarding,
       awardPoints,
+      redeemPoints,
       updateOptIns,
       resetMember,
     }),
-    [member, ready, completeOnboarding, awardPoints, updateOptIns, resetMember],
+    [member, ready, completeOnboarding, awardPoints, redeemPoints, updateOptIns, resetMember],
   );
 
   return <MemberContext.Provider value={value}>{children}</MemberContext.Provider>;

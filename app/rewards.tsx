@@ -1,25 +1,60 @@
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { TierBadge } from '@/components/TierBadge';
+import { SAMPLE_REWARDS } from '@/constants/sampleData';
 import { TIERS, tierIndex, tierProgress } from '@/lib/rewards';
 import { useMember } from '@/providers/MemberProvider';
 import { useTheme } from '@/theme/ThemeProvider';
-import { PointsActivity } from '@/types';
+import { PointsActivity, RedeemableReward } from '@/types';
 
 export default function RewardsScreen() {
   const theme = useTheme();
-  const { member } = useMember();
+  const { member, redeemPoints } = useMember();
   if (!member) return null;
 
-  const { current, next, progress, pointsToNext } = tierProgress(member.points);
+  // Tier progress is driven by lifetime points; the big number is the
+  // spendable balance the member can redeem right now.
+  const { current, next, progress, pointsToNext } = tierProgress(member.lifetimePoints);
   const currentIndex = tierIndex(current.tier);
+
+  const onRedeem = (reward: RedeemableReward) => {
+    if (member.points < reward.cost) {
+      const short = reward.cost - member.points;
+      Alert.alert(
+        'Not enough points yet',
+        `You need ${short} more point${short === 1 ? '' : 's'} for ${reward.title}.`,
+      );
+      return;
+    }
+    Alert.alert('Redeem reward?', `Use ${reward.cost} points for ${reward.title}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: `Redeem ${reward.cost} pts`,
+        onPress: async () => {
+          const result = await redeemPoints({
+            cost: reward.cost,
+            reason: `Redeemed: ${reward.title}`,
+          });
+          if (result.redeemed) {
+            Alert.alert(
+              '🎉 Redeemed!',
+              `${reward.title}. Show this to staff with your membership card. You have ${result.balance} points left.`,
+            );
+          } else if (result.insufficient) {
+            Alert.alert('Not enough points yet', `You need more points for ${reward.title}.`);
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <Screen scroll>
-      {/* Points + current tier */}
+      {/* Spendable balance + current tier */}
       <View
         style={[
           styles.hero,
@@ -33,7 +68,7 @@ export default function RewardsScreen() {
         ]}
       >
         <AppText variant="label" color={theme.colors.textSecondary}>
-          Your Smart Rewards
+          Points to spend
         </AppText>
         <AppText variant="display" weight="bold" color={theme.colors.primary}>
           {member.points} pts
@@ -51,6 +86,57 @@ export default function RewardsScreen() {
               : 'You’ve reached the highest tier — ka pai!'}
           </AppText>
         </View>
+      </View>
+
+      {/* Redeem */}
+      <AppText variant="heading" weight="bold">
+        Redeem your points
+      </AppText>
+      <View style={{ gap: theme.spacing.sm }}>
+        {SAMPLE_REWARDS.map((reward) => {
+          const affordable = member.points >= reward.cost;
+          return (
+            <View
+              key={reward.id}
+              style={[
+                styles.reward,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.lg,
+                  gap: theme.spacing.sm,
+                },
+              ]}
+            >
+              <View style={styles.rewardHeader}>
+                <AppText variant="label" weight="bold" style={styles.rewardTitle}>
+                  {reward.icon ? `${reward.icon} ` : ''}
+                  {reward.title}
+                </AppText>
+                <AppText variant="caption" weight="bold" color={theme.colors.accent}>
+                  {reward.cost} pts
+                </AppText>
+              </View>
+              {reward.description ? (
+                <AppText variant="caption" color={theme.colors.textMuted}>
+                  {reward.description}
+                </AppText>
+              ) : null}
+              <PrimaryButton
+                label={
+                  affordable
+                    ? `Redeem · ${reward.cost} pts`
+                    : `Need ${reward.cost - member.points} more`
+                }
+                tone={affordable ? 'primary' : 'neutral'}
+                disabled={!affordable}
+                onPress={() => onRedeem(reward)}
+                accessibilityHint={`Spend ${reward.cost} points on ${reward.title}`}
+              />
+            </View>
+          );
+        })}
       </View>
 
       {/* Tier ladder */}
@@ -123,6 +209,7 @@ export default function RewardsScreen() {
 
 function ActivityRow({ activity }: { activity: PointsActivity }) {
   const theme = useTheme();
+  const earned = activity.points >= 0;
   return (
     <View
       style={[
@@ -148,8 +235,12 @@ function ActivityRow({ activity }: { activity: PointsActivity }) {
           })}
         </AppText>
       </View>
-      <AppText variant="label" weight="bold" color={theme.colors.primary}>
-        +{activity.points}
+      <AppText
+        variant="label"
+        weight="bold"
+        color={earned ? theme.colors.primary : theme.colors.textSecondary}
+      >
+        {earned ? `+${activity.points}` : `−${Math.abs(activity.points)}`}
       </AppText>
     </View>
   );
@@ -157,6 +248,9 @@ function ActivityRow({ activity }: { activity: PointsActivity }) {
 
 const styles = StyleSheet.create({
   hero: { borderWidth: 1 },
+  reward: { borderWidth: 1 },
+  rewardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  rewardTitle: { flex: 1 },
   tierRow: { borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
   activity: { borderWidth: 1, flexDirection: 'row', alignItems: 'center' },
 });
