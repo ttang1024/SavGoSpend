@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "SavGoSpend",
+    "slug": "sgo",
+    "scheme": "sgo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "nz.savgospend.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SGO uses your location to show nearby participating retailers and local travel information.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "nz.savgospend.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_ANDROID_GOOGLE_MAPS_API_KEY"
+        }
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-font",
+      "expo-splash-screen",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SGO uses your location to show nearby participating retailers and local travel information."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "SGO uses the microphone so you can move around the app with Voice Commands.",
+          "speechRecognitionPermission": "SGO uses speech recognition to understand the commands you speak.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

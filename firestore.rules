@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// SGO Firestore security rules — a core NZ Privacy Act 2020 control.
+// Members can only ever read or write their OWN profile. Public catalogue data
+// is read-only to the app; writes happen via the (future) SGO admin panel with
+// privileged credentials.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Member profiles: doc id is the member's auth uid. Owner-only access.
+    match /members/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Catalogue content shown in the app: anyone may read, no client writes.
+    match /retailers/{id} { allow read: if true; allow write: if false; }
+    match /events/{id}    { allow read: if true; allow write: if false; }
+    match /articles/{id}  { allow read: if true; allow write: if false; }
+
+    // Community tips: signed-in members may submit (they enter the review
+    // queue as "pending"); reads are open; moderation is admin-only.
+    match /tips/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.status == 'pending';
+      allow update, delete: if false;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
